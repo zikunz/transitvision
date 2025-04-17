@@ -14,9 +14,13 @@ import seaborn as sns
 from pathlib import Path
 import os
 import sys
+import matplotlib
 
 # Add project root to Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+
+# Set backend to ensure plots display properly (critical for some environments)
+matplotlib.use('TkAgg')  # Try changing this if plots don't display
 
 # Set up visualization
 try:
@@ -30,8 +34,16 @@ except:
         # Fallback to basic grid
         plt.grid(True)
 
+# Configure matplotlib
 plt.rcParams['figure.figsize'] = (12, 6)
+plt.ioff()  # Turn off interactive mode to prevent auto-closing
 pd.set_option('display.max_columns', None)
+
+# Add function to pause between figures
+def pause_for_plot():
+    """Pause execution until user closes the plot window."""
+    print("\n[Figure displayed] Press ENTER in this terminal to continue to next figure...")
+    input()
 
 def generate_transit_data(n_days=90, n_routes=5, n_stops_per_route=10, seed=42):
     """Generate synthetic transit data for demonstration."""
@@ -265,6 +277,7 @@ def plot_ridership_trends(data, time_grouping="daily"):
         plt.grid(True, linestyle='--', alpha=0.7)
         plt.tight_layout()
         plt.show()
+        pause_for_plot()
         
         # Plot by route
         plt.figure(figsize=(12, 6))
@@ -281,6 +294,7 @@ def plot_ridership_trends(data, time_grouping="daily"):
         plt.legend(title='Route')
         plt.tight_layout()
         plt.show()
+        pause_for_plot()
 
 def plot_performance_comparison(data, metric="ridership", plot_type="boxplot"):
     """Plot transit performance comparison."""
@@ -302,6 +316,7 @@ def plot_performance_comparison(data, metric="ridership", plot_type="boxplot"):
     plt.grid(True, linestyle='--', alpha=0.7)
     plt.tight_layout()
     plt.show()
+    pause_for_plot()
 
 def analyze_sentiment(feedback_data):
     """Basic sentiment analysis based on ratings."""
@@ -322,10 +337,33 @@ def analyze_sentiment(feedback_data):
 
 def plot_sentiment_distribution(sentiment_data):
     """Plot sentiment distribution."""
-    # Plot sentiment distribution
+    # Print debug info
+    print(f"Sentiment data shape: {sentiment_data.shape}")
+    print(f"Sentiment data columns: {sentiment_data.columns.tolist()}")
+    
+    # Create a cleaner, more explicit plot using seaborn instead of pandas built-in plotting
     plt.figure(figsize=(12, 6))
-    sentiment_data.plot(kind='bar', stacked=True, 
-                        color=['red', 'gray', 'green'])
+    
+    # Convert to a format suitable for seaborn
+    plot_data = sentiment_data.reset_index().melt(
+        id_vars='route_id',
+        var_name='sentiment',
+        value_name='percentage'
+    )
+    
+    # Create the plot
+    sns.barplot(
+        x='route_id', 
+        y='percentage', 
+        hue='sentiment', 
+        data=plot_data, 
+        palette={
+            'negative': 'red', 
+            'neutral': 'gray', 
+            'positive': 'green'
+        }
+    )
+    
     plt.title('Sentiment Distribution by Route')
     plt.xlabel('Route')
     plt.ylabel('Percentage')
@@ -333,6 +371,113 @@ def plot_sentiment_distribution(sentiment_data):
     plt.grid(True, linestyle='--', alpha=0.7)
     plt.tight_layout()
     plt.show()
+    pause_for_plot()
+
+def analyze_remote_work_impact(data, route=None):
+    """Analyze the impact of remote work on ridership."""
+    df = data.copy()
+    
+    # Filter by route if specified
+    if route is not None:
+        df = df[df['route_id'] == route]
+    
+    # Group by remote work percentage brackets
+    df['remote_work_bracket'] = pd.cut(
+        df['remote_work_percent'], 
+        bins=[0, 10, 20, 30, 40, 50, 60, 70, 100],
+        labels=["0-10%", "10-20%", "20-30%", "30-40%", "40-50%", "50-60%", "60-70%", "70-100%"]
+    )
+    
+    # Calculate average ridership by remote work bracket
+    result = df.groupby('remote_work_bracket').agg({
+        'ridership': ['mean', 'median', 'std', 'count']
+    }).reset_index()
+    
+    # Flatten MultiIndex columns
+    result.columns = ['_'.join(col).strip('_') for col in result.columns.values]
+    
+    return result
+
+def plot_remote_work_impact(impact_data):
+    """Plot impact of remote work on ridership."""
+    plt.figure(figsize=(12, 6))
+    
+    # Bar plot of average ridership by remote work bracket
+    # Make sure we're using the correct column name and the data is not empty
+    print(f"Impact data columns: {impact_data.columns.tolist()}")
+    print(f"Impact data shape: {impact_data.shape}")
+    
+    # Force sort by bracket order to ensure proper display
+    bracket_order = ["0-10%", "10-20%", "20-30%", "30-40%", "40-50%", "50-60%", "60-70%", "70-100%"]
+    impact_data['remote_work_bracket'] = pd.Categorical(
+        impact_data['remote_work_bracket'],
+        categories=bracket_order,
+        ordered=True
+    )
+    impact_data = impact_data.sort_values('remote_work_bracket')
+    
+    # Plot using sorted data
+    ax = sns.barplot(x='remote_work_bracket', y='ridership_mean', data=impact_data)
+    
+    plt.title('Impact of Remote Work on Ridership')
+    plt.xlabel('Remote Work Percentage')
+    plt.ylabel('Average Ridership')
+    plt.grid(True, linestyle='--', alpha=0.7)
+    plt.xticks(rotation=45)  # Rotate labels for better visibility
+    plt.tight_layout()
+    plt.show()
+    pause_for_plot()
+
+def compare_weekday_weekend_impact(data):
+    """Compare impact of remote work on weekdays vs weekends."""
+    df = data.copy()
+    
+    # Group by remote work percentage brackets and weekday/weekend
+    df['remote_work_bracket'] = pd.cut(
+        df['remote_work_percent'], 
+        bins=[0, 20, 40, 60, 80, 100],
+        labels=["0-20%", "20-40%", "40-60%", "60-80%", "80-100%"]
+    )
+    
+    # Calculate average ridership by remote work bracket and weekday/weekend
+    result = df.groupby(['remote_work_bracket', 'is_weekend'])['ridership'].mean().reset_index()
+    
+    # Print debug info about the result
+    print(f"Weekday/weekend analysis data shape: {result.shape}")
+    print(f"Weekday/weekend analysis data columns: {result.columns.tolist()}")
+    
+    # Force sort by bracket order
+    bracket_order = ["0-20%", "20-40%", "40-60%", "60-80%", "80-100%"]
+    result['remote_work_bracket'] = pd.Categorical(
+        result['remote_work_bracket'],
+        categories=bracket_order,
+        ordered=True
+    )
+    result = result.sort_values(['remote_work_bracket', 'is_weekend'])
+    
+    # Plot
+    plt.figure(figsize=(12, 6))
+    
+    # Convert boolean to string for better legend
+    result['Day Type'] = result['is_weekend'].map({True: 'Weekend', False: 'Weekday'})
+    
+    # Make sure both weekday and weekend have all brackets
+    sns.lineplot(
+        data=result,
+        x='remote_work_bracket',
+        y='ridership',
+        hue='Day Type',
+        marker='o',
+        linewidth=2
+    )
+    
+    plt.title('Impact of Remote Work: Weekday vs Weekend')
+    plt.xlabel('Remote Work Percentage')
+    plt.ylabel('Average Ridership')
+    plt.grid(True, linestyle='--', alpha=0.7)
+    plt.tight_layout()
+    plt.show()
+    pause_for_plot()
 
 def build_prediction_model(X_train, y_train):
     """Build a simple random forest model for ridership prediction."""
@@ -378,6 +523,7 @@ def evaluate_model(model, X_test, y_test):
     plt.grid(True, linestyle='--', alpha=0.7)
     plt.tight_layout()
     plt.show()
+    pause_for_plot()
 
 def main():
     """Run the TransitVision demo."""
@@ -454,6 +600,19 @@ def main():
     
     print("\nEvaluating model performance...")
     evaluate_model(model, X_test, y_test)
+    
+    # Analyze remote work impact
+    print("\nAnalyzing remote work impact...")
+    remote_work_impact = analyze_remote_work_impact(transit_data)
+    print("Remote work impact analysis complete")
+    
+    # Plot remote work impact
+    print("\nPlotting remote work impact...")
+    plot_remote_work_impact(remote_work_impact)
+    
+    # Compare weekday/weekend impact
+    print("\nComparing weekday vs weekend impact...")
+    compare_weekday_weekend_impact(transit_data)
     
     print("\nDemo complete!")
 
